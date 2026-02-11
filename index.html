@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מערכת שיקוף פדגוגי - ישיבת בני עקיבא חדרה</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap');
+        body { font-family: 'Heebo', sans-serif; }
+        .writing-vertical { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); }
+        .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const SCHOOL_LOGO = "https://assets.rishum.app/hotlink-ok/v_school_logos/nl6395a9e0eefae.png";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyDVg5CSS9chNdg14kc_hvAuxoH10bjSTds",
+          authDomain: "status-bagruyot.firebaseapp.com",
+          projectId: "status-bagruyot",
+          storageBucket: "status-bagruyot.firebasestorage.app",
+          messagingSenderId: "796959466616",
+          appId: "1:796959466616:web:4b5b40d012cb7cc36c398d"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        const CLASSES = {
+          "ya1": { name: 'י"א 1', subjects: ["תלמוד", "תנ\"ך", "לשון - בן", "לשון- אביגיל", "היסטוריה", "ספרות", "אזרחות", "מתמטיקה - 3", "מתמטיקה - 4", "מתמטיקה 5", "אנגלית- מיכל", "אנגלית - חווה", "אנגלית- יערה", "חשמל - אסתר", "חשמל- נהוראי", "ביולוגיה", "ביוטכנולוגיה", "מחשבת מוגבר", "חינוך גופני"], students: ["אליו אורי", "אלפסי ינון אליה", "אריה אפיק", "באלאטה נהוראי", "בוארון יהונתן חיים", "בן ברית יוחאי", "בנגיו ישי", "ברודני דניאל", "דואני נח", "דוד כרמי", "חומרי מיכאל", "חן אור", "יצחקי אליה", "מששה נועם ישי", "נגר ידידיה", "נגר יוסף חיים", "נחמני נתנאל", "קטוע מאור", "קטורזה אפרים", "שושן אורי יהודה"] },
+          "ya2": { name: 'י"א 2', subjects: ["תלמוד", "תנ\"ך", "לשון", "היסטוריה", "ספרות", "אזרחות", "מתמטיקה - 3", "מתמטיקה - 4", "מתמטיקה 5", "מתמטיקה - מואץ", "אנגלית- מיכל", "אנגלית - חווה", "אנגלית- יערה", "חשמל - רועי", "חשמל- נהוראי", "ביולוגיה", "ביוטכנולוגיה", "פיזיקה", "מדעי המחשב", "מחשבת מוגבר", "חינוך גופני"], students: ["אדגו אור", "אוחנה יהונתן", "איפרגן אורי שמעון", "אמסטר נעם בצלאל", "ביטון איתן אהרן", "ביטון אריאל ישראל", "בן פורת עדי יהודה", "גיאת ליעד", "דקל לוי יצחק", "וגנר שחר", "זנו בעז", "יצחק הראל", "כהן גיא", "כהן יהונתן", "כהן יוסף", "כהן שילה", "כחלון אושר", "מור מנשה יוסף", "מימון אבינועם שמעו", "נחום אורי", "סופר הלל בצלאל", "פרנק דביר", "צגיה אדיר", "רחמים יגל", "שייבין רועי", "שמע הראל", "שרעבי לבנה"] },
+          "yb1": { name: 'י"ב 1', subjects: ["תלמוד", "תנ\"ך", "אזרחות", "מתמטיקה - 3", "מתמטיקה - 4", "מתמטיקה 5", "אנגלית- מיכל", "אנגלית - דקלה", "חשמל", "מחשבת", "חינוך גופני"], students: ["אואקנין יאיר", "אמסלם דביר", "אקר לירן", "ארדני אבינועם", "ביינה אוריאל", "בן הראש דוד אברהם", "בן הרוש אלי פרדג'ה", "זאוי אדם", "חממי אלירן", "טביב שליו", "טוויל סמואל יוסף", "טיירי אלראי", "מנחימוב אופיר יאיר", "קרסיס רפאל ציון", "רוקח אברהם", "שרעבי אליה יוסף"] },
+          "yb2": { name: 'י"ב 2', subjects: ["תלמוד", "תנ\"ך", "אזרחות", "מתמטיקה - 3", "מתמטיקה - 4", "מתמטיקה 5", "אנגלית- מיכל", "אנגלית - דקלה", "חשמל", "מחשבת", "מחשבת - מוגבר", "מדעי המחשב", "חינוך גופני"], students: ["אוחנה נועם יעקב", "ביטון ליאם אברהם", "בן שלומי מאיר דוד", "ברבי דוב אליהו פר", "גחלת ידעאל", "גיאת יגל", "גירפי אופק", "דהן יוסף יוחאי", "הלוי לוין איתמר עקיבא", "זרסקי הלל", "כהן אביאל", "ליאני אהרון סרג'", "סאסי בניה ניסים", "פלח אור יוסף", "שלי גלעד אליהו"] }
+        };
+
+        function App() {
+          const [pass, setPass] = useState("");
+          const [isAuth, setIsAuth] = useState(false);
+          const [activeTab, setActiveTab] = useState("ya1");
+          const [data, setData] = useState({});
+          const [showSummary, setShowSummary] = useState(false);
+          const [reasonModal, setReasonModal] = useState(null);
+
+          useEffect(() => {
+            if (isAuth) {
+              return db.collection("schools").doc("pedagogical_data").onSnapshot(doc => {
+                if (doc.exists) setData(doc.data());
+              });
+            }
+          }, [isAuth]);
+
+          const handleLogin = (e) => {
+            e.preventDefault();
+            if (pass === "340356") {
+                auth.signInAnonymously().then(() => setIsAuth(true));
+            } else alert("סיסמה שגויה");
+          };
+
+          const update = (key, val) => {
+            db.collection("schools").doc("pedagogical_data").set({[key]: val}, {merge: true});
+          };
+
+          const handleMarkClick = (student, sub) => {
+            const key = `mark_${activeTab}_${student}_${sub}`;
+            const next = ((data[key] || 0) + 1) % 4;
+            update(key, next);
+            if (next === 3) setReasonModal({ key: `reason_${activeTab}_${student}_${sub}`, student, sub });
+          };
+
+          const atRiskStudents = useMemo(() => {
+            if (!CLASSES[activeTab]) return [];
+            return CLASSES[activeTab].students.map(s => {
+              const risks = CLASSES[activeTab].subjects.filter(sub => data[`mark_${activeTab}_${s}_${sub}`] === 3);
+              return risks.length > 0 ? { name: s, risks } : null;
+            }).filter(Boolean);
+          }, [activeTab, data]);
+
+          if (!isAuth) {
+            return (
+              <div className="h-screen flex items-center justify-center bg-[#003366] p-6">
+                <form onSubmit={handleLogin} className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+                  <img src={SCHOOL_LOGO} className="h-24 mx-auto mb-6 object-contain" alt="לוגו ישיבת בני עקיבא" />
+                  <h2 className="text-xl font-bold mb-6 text-gray-800">מערכת שיקוף פדגוגי - כניסה</h2>
+                  <input type="password" value={pass} onChange={e=>setPass(e.target.value)} className="w-full border-2 p-3 rounded-xl mb-4 text-center text-2xl outline-none focus:border-blue-500" placeholder="סיסמה" autoFocus />
+                  <button className="w-full bg-[#003366] text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all">כניסה</button>
+                </form>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen">
+              <header className="bg-white shadow sticky top-0 z-40 p-4 border-b-2 border-blue-900">
+                <div className="max-w-7xl mx-auto flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-4">
+                    <img src={SCHOOL_LOGO} className="h-12 object-contain" alt="לוגו" />
+                    <h1 className="font-bold text-blue-900 text-lg hidden md:block">מערכת שיקוף פדגוגי - יב"א חדרה</h1>
+                  </div>
+                  <button onClick={() => setShowSummary(true)} className="bg-amber-500 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-amber-600 transition-all text-sm">דו"ח סיכום ישיבה</button>
+                </div>
+                <div className="flex gap-2 overflow-x-auto max-w-7xl mx-auto scrollbar-hide">
+                  {Object.keys(CLASSES).map(k => (
+                    <button key={k} onClick={() => setActiveTab(k)} className={`px-5 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all ${activeTab === k ? 'bg-blue-900 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{CLASSES[k].name}</button>
+                  ))}
+                </div>
+              </header>
+
+              {reasonModal && (
+                <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+                    <h3 className="font-bold text-lg mb-2 text-red-700 underline">פירוט סיבת חשש בגרות</h3>
+                    <p className="text-sm mb-4">תלמיד: <strong>{reasonModal.student}</strong> | מקצוע: <strong>{reasonModal.sub}</strong></p>
+                    <textarea 
+                      className="w-full border-2 p-3 rounded-lg mb-4 h-32 text-right outline-none focus:border-red-400"
+                      placeholder="פרט כאן את סיבת הכשל..."
+                      value={data[reasonModal.key] || ""}
+                      onChange={(e) => update(reasonModal.key, e.target.value)}
+                    ></textarea>
+                    <button onClick={() => setReasonModal(null)} className="w-full bg-red-600 text-white py-2 rounded-lg font-bold">שמור וסגור</button>
+                  </div>
+                </div>
+              )}
+
+              {showSummary && (
+                <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto">
+                    <div className="flex justify-between items-center mb-6 border-b-2 pb-3 sticky top-0 bg-white">
+                        <h2 className="text-xl font-bold text-blue-900 tracking-tight">ריכוז תלמידים בסיכון - {CLASSES[activeTab].name}</h2>
+                        <button onClick={() => setShowSummary(false)} className="text-gray-400 text-3xl hover:text-black">&times;</button>
+                    </div>
+                    <div className="space-y-4">
+                      {atRiskStudents.length > 0 ? atRiskStudents.map(s => (
+                        <div key={s.name} className="border-r-8 border-red-600 bg-red-50 p-4 rounded-lg shadow-sm">
+                          <div className="font-bold text-lg text-red-900 mb-2 underline decoration-red-200 underline-offset-4">{s.name}</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {s.risks.map(r => (
+                              <div key={r} className="text-sm bg-white p-3 rounded-md border border-red-200 shadow-sm">
+                                <span className="font-bold text-red-700 block mb-1">● {r}</span> 
+                                <span className="italic text-gray-700">{data[`reason_${activeTab}_${s.name}_${r}`] || "לא פורטה סיבה"}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-4 pt-2 border-t border-red-200 text-sm font-bold text-gray-800">
+                             מענה פדגוגי: <span className="text-blue-800 italic">{data[`inter_${activeTab}_${s.name}`] || "טרם הוזנה החלטה"}</span>
+                          </div>
+                        </div>
+                      )) : <div className="text-center py-20 text-gray-400 font-medium italic">אין תלמידים המסומנים עם '3' בכיתה זו.</div>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <main className="p-4 overflow-x-auto">
+                <table className="min-w-full bg-white border-collapse shadow-xl rounded-lg overflow-hidden border-2 border-gray-200">
+                  <thead className="bg-blue-50">
+                    <tr>
+                      <th className="sticky right-0 bg-blue-100 border p-3 text-right w-40 z-10 shadow-md">שם התלמיד</th>
+                      {CLASSES[activeTab].subjects.map(sub => (
+                        <th key={sub} className="border p-2 h-36 w-12"><div className="writing-vertical mx-auto text-[11px] font-bold text-blue-900 tracking-tighter">{sub}</div></th>
+                      ))}
+                      <th className="border p-3 text-right w-64">מענה פדגוגי/החלטה</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {CLASSES[activeTab].students.map(student => (
+                      <tr key={student} className="hover:bg-blue-50 transition-colors border-b border-gray-100">
+                        <td className="sticky right-0 bg-white border p-3 font-bold text-gray-800 z-10 border-l-2 shadow-sm">{student}</td>
+                        {CLASSES[activeTab].subjects.map(sub => {
+                          const kMark = `mark_${activeTab}_${student}_${sub}`;
+                          const m = data[kMark] || 0;
+                          return (
+                            <td key={sub} 
+                                onClick={() => handleMarkClick(student, sub)}
+                                className={`border p-1 text-center cursor-pointer text-lg font-black transition-all duration-150 select-none ${m===1?'bg-green-100 text-green-800':m===2?'bg-yellow-100 text-yellow-800':m===3?'bg-red-200 text-red-900 animate-pulse':''}`}>
+                                {m || ""}
+                            </td>
+                          );
+                        })}
+                        <td className="border p-1">
+                          <input 
+                            type="text" 
+                            value={data[`inter_${activeTab}_${student}`] || ""} 
+                            onChange={e => update(`inter_${activeTab}_${student}`, e.target.value)} 
+                            className="w-full p-2 bg-transparent text-sm outline-none focus:bg-white rounded transition-all placeholder:text-gray-300" 
+                            placeholder="סיכום החלטה..." 
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </main>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
