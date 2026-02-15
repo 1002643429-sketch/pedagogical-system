@@ -55,8 +55,12 @@
           const [isAuth, setIsAuth] = useState(false);
           const [activeTab, setActiveTab] = useState("ya1");
           const [data, setData] = useState({});
+          
+          // Modals
           const [showSummary, setShowSummary] = useState(false);
+          const [showStats, setShowStats] = useState(false);
           const [reasonModal, setReasonModal] = useState(null);
+          const [studentCard, setStudentCard] = useState(null);
 
           useEffect(() => {
             if (isAuth) {
@@ -84,11 +88,56 @@
             if (next === 3) setReasonModal({ key: `reason_${activeTab}_${student}_${sub}`, student, sub });
           };
 
+          // Logic for Student Card & Risk Analysis
+          const analyzeStudent = (studentName) => {
+            const subjects = CLASSES[activeTab].subjects;
+            let count1 = 0, count2 = 0, count3 = 0;
+            let failedLashon = false;
+            let failedSubjects = [];
+
+            subjects.forEach(sub => {
+                const mark = data[`mark_${activeTab}_${studentName}_${sub}`] || 0;
+                if (mark === 1) count1++;
+                if (mark === 2) count2++;
+                if (mark === 3) {
+                    count3++;
+                    failedSubjects.push(sub);
+                    if (sub.includes("לשון")) failedLashon = true;
+                }
+            });
+
+            // Definition of "Student in Regression": Failed Lashon OR Failed > 1 subject (meaning 2 or more)
+            const isRegression = failedLashon || count3 >= 2;
+            const total = count1 + count2 + count3;
+            
+            return { name: studentName, count1, count2, count3, total, isRegression, failedSubjects, failedLashon };
+          };
+
+          // Logic for Grade Statistics
+          const calculateClassStats = () => {
+            const subjects = CLASSES[activeTab].subjects;
+            const students = CLASSES[activeTab].students;
+            
+            return subjects.map(sub => {
+                let s1=0, s2=0, s3=0;
+                students.forEach(stud => {
+                    const m = data[`mark_${activeTab}_${stud}_${sub}`];
+                    if (m===1) s1++;
+                    if (m===2) s2++;
+                    if (m===3) s3++;
+                });
+                return { name: sub, s1, s2, s3, total: students.length };
+            });
+          };
+
+          // Summary Report Logic
           const atRiskStudents = useMemo(() => {
             if (!CLASSES[activeTab]) return [];
             return CLASSES[activeTab].students.map(s => {
+              const analysis = analyzeStudent(s);
+              // Show in summary if any risk exists (3)
               const risks = CLASSES[activeTab].subjects.filter(sub => data[`mark_${activeTab}_${s}_${sub}`] === 3);
-              return risks.length > 0 ? { name: s, risks } : null;
+              return risks.length > 0 ? { name: s, risks, analysis } : null;
             }).filter(Boolean);
           }, [activeTab, data]);
 
@@ -113,7 +162,10 @@
                     <img src={SCHOOL_LOGO} className="h-12 object-contain" alt="לוגו" />
                     <h1 className="font-bold text-blue-900 text-lg hidden md:block">מערכת שיקוף פדגוגי - יב"א חדרה</h1>
                   </div>
-                  <button onClick={() => setShowSummary(true)} className="bg-amber-500 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-amber-600 transition-all text-sm">דו"ח סיכום ישיבה</button>
+                  <div className="flex gap-2">
+                      <button onClick={() => setShowStats(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-700 text-sm">📊 סטטיסטיקה</button>
+                      <button onClick={() => setShowSummary(true)} className="bg-amber-500 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-amber-600 text-sm">📋 דו"ח סיכום</button>
+                  </div>
                 </div>
                 
                 <div className="flex gap-2 overflow-x-auto max-w-7xl mx-auto scrollbar-hide mb-4">
@@ -130,12 +182,112 @@
                       לחיצה שלישית - תלמיד שקיים חשש אמיתי לכישלון במקצוע (ייפתח חלון לכתיבת הסיבות). <br/>
                       <span className="font-bold text-blue-700 underline">במקרה של לחיצה נוספת המידע יתאפס.</span>
                     </p>
-                    <p className="mt-2 font-medium italic">
-                      שימו לב: הקפידו למלא אך ורק את העמודה שלכם. המידע נשמר אוטומטית. בהצלחה!
+                    <p className="mt-2 text-xs text-gray-500">
+                      * ניתן ללחוץ על שם התלמיד לפתיחת כרטיס פדגוגי מורחב.
                     </p>
                 </div>
               </header>
 
+              {/* MODAL: Student Card */}
+              {studentCard && (() => {
+                  const info = analyzeStudent(studentCard);
+                  return (
+                    <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4" onClick={() => setStudentCard(null)}>
+                      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 className="text-2xl font-bold text-blue-900">{info.name}</h2>
+                                <div className="text-gray-500 text-sm">כרטיס תלמיד פדגוגי</div>
+                            </div>
+                            <button onClick={() => setStudentCard(null)} className="text-gray-400 text-2xl font-bold">&times;</button>
+                        </div>
+
+                        {/* Early Warning System */}
+                        {info.isRegression ? (
+                            <div className="bg-red-100 border-r-4 border-red-600 p-3 rounded mb-6 text-red-900 animate-pulse">
+                                <strong>⚠️ התראת תלמיד בנסיגה</strong>
+                                <ul className="list-disc list-inside text-sm mt-1">
+                                    {info.failedLashon && <li>כישלון במקצוע לשון</li>}
+                                    {info.count3 >= 2 && <li>כישלון ב-2 מקצועות או יותר</li>}
+                                </ul>
+                            </div>
+                        ) : (
+                            <div className="bg-green-50 border-r-4 border-green-500 p-3 rounded mb-6 text-green-900">
+                                <strong>✅ מצב תקין</strong>
+                                <p className="text-sm">התלמיד אינו מוגדר בנסיגה ע"פ הקריטריונים.</p>
+                            </div>
+                        )}
+
+                        {/* Persistence Graph (Balance) */}
+                        <div className="mb-6">
+                            <h3 className="font-bold mb-2 text-gray-700">מאזן התמדה והישגים:</h3>
+                            <div className="h-6 w-full bg-gray-200 rounded-full overflow-hidden flex">
+                                <div style={{width: `${(info.count1 / Math.max(info.total,1))*100}%`}} className="bg-green-500 h-full"></div>
+                                <div style={{width: `${(info.count2 / Math.max(info.total,1))*100}%`}} className="bg-yellow-400 h-full"></div>
+                                <div style={{width: `${(info.count3 / Math.max(info.total,1))*100}%`}} className="bg-red-500 h-full"></div>
+                            </div>
+                            <div className="flex justify-between text-xs mt-1 text-gray-500 font-bold">
+                                <span className="text-green-600">הצלחה ({info.count1})</span>
+                                <span className="text-yellow-600">מתנדנד ({info.count2})</span>
+                                <span className="text-red-600">סיכון ({info.count3})</span>
+                            </div>
+                        </div>
+
+                        {/* Breakdown */}
+                        <div>
+                            <h3 className="font-bold mb-2 text-gray-700">פירוט מקצועות בסיכון:</h3>
+                            {info.failedSubjects.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {info.failedSubjects.map(sub => (
+                                        <span key={sub} className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm font-bold border border-red-200">{sub}</span>
+                                    ))}
+                                </div>
+                            ) : <p className="text-gray-400 italic text-sm">אין מקצועות בסיכון.</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+              })()}
+
+              {/* MODAL: Class Statistics */}
+              {showStats && (
+                <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4" onClick={() => setShowStats(false)}>
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-6 border-b pb-3 sticky top-0 bg-white">
+                        <h2 className="text-xl font-bold text-blue-900">סטטיסטיקה שכבתית - {CLASSES[activeTab].name}</h2>
+                        <button onClick={() => setShowStats(false)} className="text-gray-400 text-3xl hover:text-black">&times;</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                            <thead>
+                                <tr className="bg-gray-100 text-gray-700">
+                                    <th className="p-3 text-right">מקצוע</th>
+                                    <th className="p-3 w-1/2">התפלגות</th>
+                                    <th className="p-3 text-center">בסיכון</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {calculateClassStats().map(stat => (
+                                    <tr key={stat.name} className="border-b hover:bg-gray-50">
+                                        <td className="p-3 font-bold">{stat.name}</td>
+                                        <td className="p-3">
+                                            <div className="h-4 w-full bg-gray-200 rounded-full overflow-hidden flex">
+                                                <div style={{width: `${(stat.s1 / stat.total)*100}%`}} className="bg-green-500" title={`הצלחה: ${stat.s1}`}></div>
+                                                <div style={{width: `${(stat.s2 / stat.total)*100}%`}} className="bg-yellow-400" title={`מתנדנד: ${stat.s2}`}></div>
+                                                <div style={{width: `${(stat.s3 / stat.total)*100}%`}} className="bg-red-500" title={`סיכון: ${stat.s3}`}></div>
+                                            </div>
+                                        </td>
+                                        <td className="p-3 text-center font-bold text-red-600">{stat.s3}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL: Input Reason */}
               {reasonModal && (
                 <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
@@ -153,6 +305,7 @@
                 </div>
               )}
 
+              {/* MODAL: Summary Report */}
               {showSummary && (
                 <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-4">
                   <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -162,17 +315,21 @@
                     </div>
                     <div className="space-y-4">
                       {atRiskStudents.length > 0 ? atRiskStudents.map(s => (
-                        <div key={s.name} className="border-r-8 border-red-600 bg-red-50 p-4 rounded-lg shadow-sm">
-                          <div className="font-bold text-lg text-red-900 mb-2 underline decoration-red-200 underline-offset-4">{s.name}</div>
+                        <div key={s.name} className={`border-r-8 p-4 rounded-lg shadow-sm ${s.analysis.isRegression ? 'bg-red-100 border-red-600' : 'bg-orange-50 border-orange-400'}`}>
+                          <div className="flex justify-between items-center mb-2">
+                             <div className="font-bold text-lg text-gray-900 underline decoration-gray-300 underline-offset-4 cursor-pointer" onClick={() => {setShowSummary(false); setStudentCard(s.name);}}>{s.name}</div>
+                             {s.analysis.isRegression && <span className="bg-red-600 text-white text-xs px-2 py-1 rounded-full font-bold animate-pulse">תלמיד בנסיגה</span>}
+                          </div>
+                          
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {s.risks.map(r => (
-                              <div key={r} className="text-sm bg-white p-3 rounded-md border border-red-200 shadow-sm">
+                              <div key={r} className="text-sm bg-white p-3 rounded-md border border-gray-200 shadow-sm">
                                 <span className="font-bold text-red-700 block mb-1">● {r}</span> 
                                 <span className="italic text-gray-700">{data[`reason_${activeTab}_${s.name}_${r}`] || "לא פורטה סיבה"}</span>
                               </div>
                             ))}
                           </div>
-                          <div className="mt-4 pt-2 border-t border-red-200 text-sm font-bold text-gray-800">
+                          <div className="mt-4 pt-2 border-t border-gray-200 text-sm font-bold text-gray-800">
                              מענה פדגוגי: <span className="text-blue-800 italic">{data[`inter_${activeTab}_${s.name}`] || "טרם הוזנה החלטה"}</span>
                           </div>
                         </div>
@@ -196,14 +353,20 @@
                   <tbody>
                     {CLASSES[activeTab].students.map(student => (
                       <tr key={student} className="hover:bg-blue-50 transition-colors border-b border-gray-100">
-                        <td className="sticky right-0 bg-white border p-3 font-bold text-gray-800 z-10 border-l-2 shadow-sm">{student}</td>
+                        <td 
+                            className="sticky right-0 bg-white border p-3 font-bold text-gray-800 z-10 border-l-2 shadow-sm cursor-pointer hover:text-blue-600 underline decoration-dotted"
+                            onClick={() => setStudentCard(student)}
+                            title="לחץ לפתיחת כרטיס תלמיד"
+                        >
+                            {student}
+                        </td>
                         {CLASSES[activeTab].subjects.map(sub => {
                           const kMark = `mark_${activeTab}_${student}_${sub}`;
                           const m = data[kMark] || 0;
                           return (
                             <td key={sub} 
                                 onClick={() => handleMarkClick(student, sub)}
-                                className={`border p-1 text-center cursor-pointer text-lg font-black transition-all duration-150 select-none ${m===1?'bg-green-100 text-green-800':m===2?'bg-yellow-100 text-yellow-800':m===3?'bg-red-200 text-red-900 animate-pulse':''}`}>
+                                className={`border p-1 text-center cursor-pointer text-lg font-black transition-all duration-150 select-none ${m===1?'bg-green-100 text-green-800':m===2?'bg-yellow-100 text-yellow-800':m===3?'bg-red-200 text-red-900':''}`}>
                                 {m || ""}
                             </td>
                           );
